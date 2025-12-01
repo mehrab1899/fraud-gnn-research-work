@@ -1,0 +1,12 @@
+# Core Python packages (install these after creating a venv)
+# NOTE: Install PyTorch and PyG separately using the official instructions described in README.md
+pandas>=1.5
+numpy>=1.23
+scikit-learn>=1.1
+imbalanced-learn>=0.10
+matplotlib>=3.5
+networkx>=2.8
+scipy>=1.9
+shap>=0.42
+
+# Optional: if you want to run SHAP explanations, keep shap in requirements. If not, remove it.
