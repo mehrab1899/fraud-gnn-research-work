@@ -4,19 +4,6 @@ This repository contains a heterogeneous GNN-based fraud detection pipeline with
 
 ---
 
-## What to push to GitHub
-
-- All source code (Python files) — e.g. `preprocessing_and_training.py`, `explainability_logger.py`, helper scripts, modules.
-- Documentation: `README.md`, `EXPLAINABILITY_LOGGING_GUIDE.md`, `EXPLAINABILITY_IMPLEMENTATION_SUMMARY.md`, `QUICK_REFERENCE.md`.
-- Small example data or a small synthetic dataset (OPTIONAL). Do NOT push large datasets (add them to `.gitignore` or use Git LFS).
-- Configuration files (.github/workflows/*), requirements files, .gitignore, LICENSE.
-
-DO NOT push:
-- Raw datasets (e.g., CSVs in `D:\Thesis\Dataset`) — keep them local or use external storage.
-- Large model checkpoints, raw logs, or other heavy binary assets (use Git LFS if necessary).
-
----
-
 ## Setup (local development)
 
 Recommended: create a Python virtual environment.
@@ -101,41 +88,6 @@ This will run a quick subsampled prototype by default (check flags at the top of
 
 ---
 
-## Using Git and pushing to GitHub
-
-1. Initialize git and commit your project:
-
-```bash
-cd d:\Thesis
-git init
-git add .
-git commit -m "Initial commit: fraud detection GNN + explainability logger"
-```
-
-2. Create an empty repository on GitHub (via web UI or `gh` CLI), then push:
-
-```bash
-git remote add origin git@github.com:<your-username>/<repo-name>.git
-git branch -M main
-git push -u origin main
-```
-
-If your data is large, consider using Git LFS:
-
-```bash
-git lfs install
-git lfs track "*.csv"
-git add .gitattributes
-```
-
----
-
-## Continuous Integration (optional)
-
-We included a simple Actions workflow skeleton (`.github/workflows/smoke_test.yml`) that you can enable to run a lightweight smoke test on push. It will not run heavy training — update it to your needs.
-
----
-
 ## Suggested repo layout
 
 ```
@@ -148,23 +100,13 @@ Thesis/
 ├─ EXPLAINABILITY_IMPLEMENTATION_SUMMARY.md
 ├─ QUICK_REFERENCE.md
 ├─ .gitignore
-└─ .github/
-   └─ workflows/
-      └─ smoke_test.yml
+
 ```
 
 ---
 
 ## Final notes
 
-- Keep raw datasets out of Git — use cloud storage (S3, GDrive) or Git LFS.
 - Install PyTorch and PyG using the official guides for correct wheels.
 - The explainability outputs are written to `D:\Thesis\explanations\` by default; change `EXPLANATION_OUTPUT_DIR` in the script to commit-friendly paths if you want small example outputs saved in the repo.
 
-If you'd like, I can:
-
-- Create a repo skeleton and push these files (I can generate git commands for you to run locally),
-- Add a basic GitHub Actions workflow file now (I created a skeleton below), or
-- Make the dataset path configurable via environment variables in `preprocessing_and_training.py`.
-
-Which of these would you like me to do next?
