@@ -18,6 +18,9 @@ from imblearn.over_sampling import RandomOverSampler, SMOTE
 import matplotlib.pyplot as plt
 import networkx as nx
 import itertools
+import os
+import builtins
+from contextlib import contextmanager
 
 # Import explainability logger
 from explainability_logger import ExplainabilityLogger
@@ -469,6 +472,19 @@ class SimpleGNNExplainer:
             loss.backward()
             optimizer.step()
 
+            # Provide periodic progress logging so the explainability phase
+            # does not appear to hang silently for long runs.
+            if (epoch + 1) % max(1, self.epochs // 10) == 0 or epoch == 0:
+                with torch.no_grad():
+                    mean_mask = torch.sigmoid(edge_mask).mean().item()
+                    try:
+                        pred_val = pred.item()
+                    except Exception:
+                        pred_val = float(pred)
+                print(
+                    f"[Explainer] epoch {epoch+1}/{self.epochs} | mean_mask={mean_mask:.4f} | pred={pred_val:.4f}"
+                )
+
         return torch.sigmoid(edge_mask).detach()
 
     def visualize_subgraph(self, node_idx, edge_index, edge_mask, y=None, top_k=20):
@@ -496,7 +512,30 @@ class SimpleGNNExplainer:
             width=1.2,
         )
         plt.title(f"Explanation for Node {node_idx}")
-        plt.show()
+
+        # Save figure to explanations directory (if available) and show non-blocking
+        out_dir = (
+            EXPLANATION_OUTPUT_DIR
+            if "EXPLANATION_OUTPUT_DIR" in globals()
+            else os.getcwd()
+        )
+        os.makedirs(out_dir, exist_ok=True)
+        fig_path = os.path.join(out_dir, f"graph_explanation_node_{node_idx}.png")
+        try:
+            plt.savefig(fig_path, bbox_inches="tight")
+            print(f"[Explainer] Saved graph explanation to: {fig_path}")
+        except Exception as e:
+            print(f"[Explainer] Warning: could not save figure: {e}")
+
+        try:
+            plt.show(block=False)
+            plt.pause(0.1)
+        except Exception:
+            # Fallback to blocking show if non-blocking not supported
+            plt.show()
+
+        # Close the figure to prevent it from blocking further execution
+        plt.close()
 
 
 class SHAPExplainer:
@@ -607,7 +646,29 @@ class SHAPExplainer:
             plt.ylabel("SHAP Value")
             plt.title("Feature Value vs Impact")
             plt.tight_layout()
-            plt.show()
+            # Save the SHAP explanation figure and show non-blocking
+            out_dir = (
+                EXPLANATION_OUTPUT_DIR
+                if "EXPLANATION_OUTPUT_DIR" in globals()
+                else os.getcwd()
+            )
+            os.makedirs(out_dir, exist_ok=True)
+            shap_path = os.path.join(
+                out_dir, f"shap_explanation_txn_{instance_idx}.png"
+            )
+            try:
+                plt.savefig(shap_path, bbox_inches="tight")
+                print(f"[SHAP] Saved feature explanation to: {shap_path}")
+            except Exception as e:
+                print(f"[SHAP] Warning: could not save SHAP figure: {e}")
+
+            try:
+                plt.show(block=False)
+                plt.pause(0.1)
+            except Exception:
+                plt.show()
+
+            plt.close()
 
             print(f"\n=== SHAP Feature Explanation for Transaction {instance_idx} ===")
             print(f"Base value (expected output): {base_value:.4f}")
@@ -627,6 +688,119 @@ class SHAPExplainer:
 
         except Exception as e:
             print(f"Error plotting explanation: {e}")
+
+
+def save_human_readable_graph_explanation(node_id, edge_mask, edge_index, top_k=20):
+    """Create human-readable CSV and Markdown explanations for a graph-level result.
+
+    This maps edge indices back to transaction rows (amount, step, sender/receiver)
+    and saves a small CSV and an explanatory Markdown file to the experiment folder.
+    """
+    try:
+        # Prepare output directory
+        out_dir = (
+            explainability_logger.exp_dir
+            if explainability_logger
+            else EXPLANATION_OUTPUT_DIR
+        )
+        os.makedirs(out_dir, exist_ok=True)
+
+        # Convert to numpy
+        mask_np = (
+            edge_mask.cpu().numpy()
+            if hasattr(edge_mask, "cpu")
+            else np.array(edge_mask)
+        )
+        eidx = edge_index
+        # Find top edges
+        top_k = min(top_k, mask_np.size)
+        top_idxs = np.argsort(mask_np)[-top_k:][::-1]
+
+        rows = []
+        for rank, ei in enumerate(top_idxs, start=1):
+            src = int(eidx[0][ei])
+            dst = int(eidx[1][ei])
+            importance = float(mask_np[ei])
+
+            def txn_row(i):
+                if 0 <= i < len(df_transaction):
+                    r = df_transaction.iloc[i]
+                    return {
+                        "idx": int(i),
+                        "step": (
+                            int(r["step"])
+                            if "step" in r.index and not pd.isna(r["step"])
+                            else None
+                        ),
+                        "amount": (
+                            float(r["amount"])
+                            if "amount" in r.index and not pd.isna(r["amount"])
+                            else None
+                        ),
+                        "sender": r["nameOrig"] if "nameOrig" in r.index else None,
+                        "receiver": r["nameDest"] if "nameDest" in r.index else None,
+                        "type": r["type"] if "type" in r.index else None,
+                    }
+                else:
+                    return {"idx": i}
+
+            src_info = txn_row(src)
+            dst_info = txn_row(dst)
+
+            rows.append(
+                {
+                    "rank": rank,
+                    "src_idx": src,
+                    "dst_idx": dst,
+                    "importance": importance,
+                    "src_step": src_info.get("step"),
+                    "src_amount": src_info.get("amount"),
+                    "src_sender": src_info.get("sender"),
+                    "src_receiver": src_info.get("receiver"),
+                    "src_type": src_info.get("type"),
+                    "dst_step": dst_info.get("step"),
+                    "dst_amount": dst_info.get("amount"),
+                    "dst_sender": dst_info.get("sender"),
+                    "dst_receiver": dst_info.get("receiver"),
+                    "dst_type": dst_info.get("type"),
+                }
+            )
+
+        # Write CSV
+        csv_path = os.path.join(out_dir, f"human_graph_explanation_node_{node_id}.csv")
+        pd.DataFrame(rows).to_csv(csv_path, index=False, encoding="utf-8")
+
+        # Write a short Markdown narrative
+        md_lines = [
+            f"# Human-readable Graph Explanation for Node {node_id}\n",
+            f"Generated: {pd.Timestamp.now().isoformat()}\n",
+            "\n",
+            "## Summary\n",
+            f"Explained node: **{node_id}** — showing the top {len(rows)} edges with highest importance.\n",
+            "\n",
+            "## Top edges (human-readable)\n",
+        ]
+
+        for r in rows:
+            md_lines.append(
+                f"{r['rank']}. Edge {r['src_idx']} -> {r['dst_idx']} | importance={r['importance']:.4f}\n"
+            )
+            md_lines.append(
+                f"   - src: sender={r.get('src_sender')} receiver={r.get('src_receiver')} step={r.get('src_step')} amount={r.get('src_amount')} type={r.get('src_type')}\n"
+            )
+            md_lines.append(
+                f"   - dst: sender={r.get('dst_sender')} receiver={r.get('dst_receiver')} step={r.get('dst_step')} amount={r.get('dst_amount')} type={r.get('dst_type')}\n"
+            )
+            md_lines.append("\n")
+
+        md_path = os.path.join(out_dir, f"human_graph_explanation_node_{node_id}.md")
+        with open(md_path, "w", encoding="utf-8") as f:
+            f.writelines(md_lines)
+
+        print(f"  [OK] Human-readable explanation saved: {csv_path}")
+        print(f"  [OK] Human-readable narrative saved: {md_path}")
+    except Exception as e:
+        print(f"[WARN] Could not create human-readable explanation: {e}")
 
 
 # ============================================================================
@@ -863,9 +1037,13 @@ with torch.no_grad():
         company_x, edge_company_h, transaction_x, edge_trx_h, companies_length
     )
     preds_logits = out_t[test_idx]
-    preds = preds_logits.argmax(dim=1).cpu()
-    preds_proba = F.softmax(preds_logits, dim=1)[:, 1].cpu()  # Probability of fraud
-    true = y[test_idx].cpu()
+    # Convert predictions and probabilities to NumPy arrays to avoid calling
+    # NumPy-only methods on PyTorch tensors (e.g., .astype)
+    preds = preds_logits.argmax(dim=1).cpu().numpy()
+    preds_proba = (
+        F.softmax(preds_logits, dim=1)[:, 1].cpu().numpy()
+    )  # Probability of fraud (numpy)
+    true = y[test_idx].cpu().numpy()
 
 print("\n=== EVALUATION RESULTS ===")
 print(classification_report(true, preds, digits=4, target_names=["Non-Fraud", "Fraud"]))
@@ -947,6 +1125,13 @@ if len(fraud_indices) > 0:
                 label="fraud",
                 top_k=20,
             )
+            # Also create a human-readable CSV/MD explanation locally
+            try:
+                save_human_readable_graph_explanation(
+                    node_to_explain, edge_mask.cpu(), edge_trx_h.cpu(), top_k=20
+                )
+            except Exception as e:
+                print(f"[WARN] Could not save human-readable graph explanation: {e}")
     except Exception as e:
         print(f"✗ Graph-level explanation failed: {e}")
 else:
@@ -1022,8 +1207,30 @@ if explainability_logger:
     print("SAVING EXPLAINABILITY REPORTS")
     print("=" * 80)
     try:
-        explainability_logger.save_aggregated_csv()
-        explainability_logger.save_summary_report()
+        # Temporarily patch builtins.open to force UTF-8 for text writes so
+        # the explainability logger can write Unicode characters on Windows
+        # systems that default to a legacy encoding (cp1252 / 'charmap').
+        @contextmanager
+        def _utf8_open_patch():
+            orig_open = builtins.open
+
+            def open_utf8(file, mode="r", *args, **kwargs):
+                # For text modes that write, ensure encoding='utf-8' unless
+                # a binary mode is used.
+                if "b" not in mode and ("w" in mode or "a" in mode or "x" in mode):
+                    kwargs.setdefault("encoding", "utf-8")
+                return orig_open(file, mode, *args, **kwargs)
+
+            builtins.open = open_utf8
+            try:
+                yield
+            finally:
+                builtins.open = orig_open
+
+        with _utf8_open_patch():
+            explainability_logger.save_aggregated_csv()
+            explainability_logger.save_summary_report()
+
         print(f"\n[OK] All explanations saved to: {explainability_logger.exp_dir}")
     except Exception as e:
         print(f"[ERROR] Error saving reports: {e}")
