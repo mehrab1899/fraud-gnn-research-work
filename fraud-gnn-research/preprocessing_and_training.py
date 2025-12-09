@@ -22,6 +22,13 @@ import os
 import builtins
 from contextlib import contextmanager
 
+# Import configuration loader
+from config_loader import Config
+
+# Load configuration from .env and config.yaml
+Config.load_env()
+config = Config.load_config_yaml()
+
 # Import explainability logger
 from explainability_logger import ExplainabilityLogger
 
@@ -34,26 +41,42 @@ except ImportError:
     print("Warning: SHAP not installed. Install with: pip install shap")
 
 # ============================================================================
-# CONFIGURATION
+# CONFIGURATION - Load from .env and config.yaml
 # ============================================================================
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-HIDDEN_DIM = 16
-MAX_TRX_PER_COMPANY = 8
-LIMIT_PER_ENTITY = 8
-MAKE_CLIQUES = False
-EPOCHS = 8
-LR = 0.001
-WEIGHT_DECAY = 1e-4
-# Quick-run flags to speed up prototyping and reduce resource usage
-QUICK_RUN = True
-QUICK_RUN_SUBSAMPLE = 0.05  # fraction of transactions to keep when QUICK_RUN=True
-QUICK_SHAP_SAMPLES = 10  # reduce SHAP background samples for quick runs
 
-# Explainability logging setup
-EXPLANATION_OUTPUT_DIR = r"D:\Thesis\explanations"
-EXPERIMENT_NAME = "fraud_detection_gnn"
+# Get hyperparameters from environment
+hyperparams = Config.get_hyperparams()
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+HIDDEN_DIM = hyperparams["hidden_dim"]
+MAX_TRX_PER_COMPANY = hyperparams["max_trx_per_company"]
+LIMIT_PER_ENTITY = hyperparams["limit_per_entity"]
+MAKE_CLIQUES = hyperparams["make_cliques"]
+EPOCHS = hyperparams["epochs"]
+LR = hyperparams["learning_rate"]
+WEIGHT_DECAY = hyperparams["weight_decay"]
+QUICK_RUN = hyperparams["quick_run"]
+QUICK_RUN_SUBSAMPLE = hyperparams["quick_run_subsample"]
+QUICK_SHAP_SAMPLES = hyperparams["quick_shap_samples"]
+LOSS_TYPE = hyperparams["loss_type"]
+
+# Get output paths from environment
+output_paths = Config.get_output_paths()
+EXPLANATION_OUTPUT_DIR = output_paths["explanation_output_dir"]
+EXPERIMENT_NAME = output_paths["experiment_name"]
 
 print(f"Device: {DEVICE}")
+print(f"Quick Run: {QUICK_RUN} (subsample={QUICK_RUN_SUBSAMPLE})")
+
+# Validate that all datasets are available
+print("\n" + "=" * 80)
+print("VALIDATING DATASETS")
+print("=" * 80)
+try:
+    Config.validate_datasets()
+except Exception as e:
+    print(f"✗ Dataset validation failed: {e}")
+    print("Please check your .env file and dataset paths.")
+    exit(1)
 
 # Initialize explainability logger
 try:
@@ -69,7 +92,7 @@ except Exception as e:
 # ============================================================================
 
 # Dataset 1: Financial Fraud Detection
-file_path_1 = r"D:\Thesis\Dataset\financial_fraud_detection_dataset.csv"
+file_path_1 = Config.get_dataset_path("financial")
 df = pd.read_csv(file_path_1)
 print("Dataset 1 loaded:", df.shape)
 
@@ -103,7 +126,7 @@ numerical_columns = [
 df_encoded[numerical_columns] = scaler.fit_transform(df_encoded[numerical_columns])
 
 # Dataset 2: German Credit Data
-file_path_2 = r"D:\Thesis\Dataset\german_credit_data.csv"
+file_path_2 = Config.get_dataset_path("credit")
 df_loan = pd.read_csv(file_path_2)
 print("Dataset 2 loaded:", df_loan.shape)
 
@@ -122,7 +145,7 @@ df_loan_encoded[["Credit amount", "Duration", "Age"]] = scaler.fit_transform(
 )
 
 # Dataset 3: Credit Risk Data
-file_path_3 = r"D:\Thesis\Dataset\nz_bank_loans_synthetic_with_dates.csv"
+file_path_3 = Config.get_dataset_path("loans")
 df_credit = pd.read_csv(file_path_3)
 print("Dataset 3 loaded:", df_credit.shape)
 
@@ -161,7 +184,7 @@ df_credit_encoded[numerical_columns] = scaler.fit_transform(
 )
 
 # Dataset 4: Transaction Data
-file_path_4 = r"D:\Thesis\Dataset\PS_20174392719_1491204439457_log.csv"
+file_path_4 = Config.get_dataset_path("transaction")
 df_transaction = pd.read_csv(file_path_4)
 print("Dataset 4 loaded:", df_transaction.shape)
 
