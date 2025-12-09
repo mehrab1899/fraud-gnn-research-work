@@ -6,12 +6,16 @@ This repository contains a heterogeneous GNN-based fraud detection pipeline with
 
 ## Setup (local development)
 
+Clone the project using this Github repo link:
+
+https://github.com/mehrab1899/fraud-gnn-research-work
+
 Recommended: create a Python virtual environment.
 
 Windows (PowerShell):
 
 ```powershell
-cd d:\Thesis
+# In your cloned directory activate virtual env using following command
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install --upgrade pip
