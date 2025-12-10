@@ -1,5 +1,4 @@
 # Core Python packages (install these after creating a venv)
-# NOTE: Install PyTorch and PyG separately using the official instructions described in README.md
 pandas>=1.5
 numpy>=1.23
 scikit-learn>=1.1
@@ -8,5 +7,16 @@ matplotlib>=3.5
 networkx>=2.8
 scipy>=1.9
 shap>=0.42
+pyyaml
+python-dotenv
 
-# Optional: if you want to run SHAP explanations, keep shap in requirements. If not, remove it.
+# PyTorch and PyTorch Geometric
+# NOTE: These have platform- and CUDA-specific wheels.
+# Install using the official instructions at: https://pytorch.org/get-started/locally/
+# CPU example:
+#   pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+# CUDA 11.8 example:
+#   pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+# Then install PyG: pip install torch-geometric
+torch>=2.0
+torch-geometric>=2.3
